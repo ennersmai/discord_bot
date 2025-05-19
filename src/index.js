@@ -1,5 +1,7 @@
 require('dotenv').config();
 const { Client, GatewayIntentBits, Collection } = require('discord.js');
+const commandHandler = require('./handlers/commandHandler');
+const eventHandler = require('./handlers/eventHandler');
 
 // Create a new client instance
 const client = new Client({
@@ -15,14 +17,13 @@ const client = new Client({
 client.commands = new Collection();
 client.cooldowns = new Collection();
 
-// When the client is ready, run this code (only once)
-client.once('ready', () => {
-    console.log(`Logged in as ${client.user.tag}!`);
-});
+// Load command and event handlers
+commandHandler(client);
+eventHandler(client);
 
 // Handle errors
-client.on('error', error => {
-    console.error('Discord client error:', error);
+process.on('unhandledRejection', error => {
+    console.error('Unhandled promise rejection:', error);
 });
 
 // Login to Discord with your client's token
