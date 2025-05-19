@@ -14,6 +14,7 @@ const DOMAIN_PATTERN = /(?:https?:\/\/)?(?:www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\
  * @returns {boolean} - Whether the message contains a URL
  */
 function containsUrl(content) {
+    if (!content || typeof content !== 'string') return false;
     return URL_PATTERN.test(content) || DOMAIN_PATTERN.test(content);
 }
 
@@ -23,27 +24,33 @@ function containsUrl(content) {
  * @returns {string[]} - Array of URLs found in the message
  */
 function extractUrls(content) {
-    const urls = [];
-    let match;
+    if (!content || typeof content !== 'string') return [];
     
-    // Extract URLs with protocol
+    const urls = [];
+    
+    // Extract URLs with protocols
+    let match;
     while ((match = URL_PATTERN.exec(content)) !== null) {
         urls.push(match[0]);
-        content = content.replace(match[0], ''); // Remove matched URL to prevent duplicate matches
+        content = content.replace(match[0], ' '.repeat(match[0].length));
     }
     
-    // Extract URLs without protocol
+    // Extract domains without protocols
     while ((match = DOMAIN_PATTERN.exec(content)) !== null) {
-        urls.push(match[0]);
-        content = content.replace(match[0], ''); // Remove matched URL
+        // Only add if not already in the list (to avoid duplicates)
+        if (!urls.includes(match[0])) {
+            urls.push(match[0]);
+        }
+        content = content.replace(match[0], ' '.repeat(match[0].length));
     }
     
-    return [...new Set(urls)]; // Remove duplicates using Set
+    return urls;
 }
 
 module.exports = {
     containsUrl,
     extractUrls,
+    // Export patterns for testing
     URL_PATTERN,
     DOMAIN_PATTERN
 }; 

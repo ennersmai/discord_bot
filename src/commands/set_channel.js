@@ -19,35 +19,51 @@ module.exports = {
                 .setRequired(true))
         .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels), // Only moderators can use this command
     
-    async execute(interaction) {
+    async execute(interaction, client) {
         try {
+            // Get the database service
+            const db = client.database;
+            
+            // Get the guild ID
+            const guildId = interaction.guild.id;
+            
             // Get the channel and enable flag from options
             const channel = interaction.options.getChannel('channel');
             const enable = interaction.options.getBoolean('enable');
             
+            // Defer reply since database operations might take some time
+            await interaction.deferReply({ ephemeral: true });
+            
             if (enable) {
                 // Add the channel to monitored channels
-                monitoredChannels.add(channel.id);
-                await interaction.reply({
+                await db.addMonitoredChannel(guildId, channel.id);
+                await interaction.editReply({
                     content: `✅ Link monitoring has been enabled for <#${channel.id}>.`,
                     ephemeral: true
                 });
             } else {
                 // Remove the channel from monitored channels
-                monitoredChannels.delete(channel.id);
-                await interaction.reply({
+                await db.removeMonitoredChannel(guildId, channel.id);
+                await interaction.editReply({
                     content: `✅ Link monitoring has been disabled for <#${channel.id}>.`,
                     ephemeral: true
                 });
             }
-            
-            // In the future, we'll store this in the database
         } catch (error) {
             console.error('Error setting monitored channel:', error);
-            await interaction.reply({
-                content: '❌ There was an error while configuring the channel.',
-                ephemeral: true
-            });
+            
+            // Handle the error gracefully
+            if (interaction.deferred) {
+                await interaction.editReply({
+                    content: '❌ There was an error while configuring the channel. Please try again later.',
+                    ephemeral: true
+                });
+            } else {
+                await interaction.reply({
+                    content: '❌ There was an error while configuring the channel. Please try again later.',
+                    ephemeral: true
+                });
+            }
         }
     },
     

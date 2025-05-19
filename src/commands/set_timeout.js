@@ -1,9 +1,5 @@
 const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
 
-// For now, we'll use a global variable to store the timeout duration
-// This will be replaced with database storage in a later phase
-let timeoutDuration = parseInt(process.env.TIMEOUT_DURATION) || 300; // Default 5 minutes
-
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('set_timeout')
@@ -16,30 +12,43 @@ module.exports = {
                 .setMaxValue(2419200)) // Discord's max timeout is 28 days (2,419,200 seconds)
         .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers), // Only moderators can use this command
     
-    async execute(interaction) {
+    async execute(interaction, client) {
         try {
+            // Get the database service
+            const db = client.database;
+            
+            // Get the guild ID
+            const guildId = interaction.guild.id;
+            
             // Get the duration from the options
             const duration = interaction.options.getInteger('duration');
             
-            // Update the timeout duration
-            timeoutDuration = duration;
+            // Defer reply since database operations might take some time
+            await interaction.deferReply({ ephemeral: true });
             
-            // We would store this in a database in the future
+            // Update the timeout duration in the database
+            await db.updateTimeoutDuration(guildId, duration);
             
             // Reply with success message
-            await interaction.reply({
+            await interaction.editReply({
                 content: `✅ Timeout duration has been set to ${duration} seconds.`,
                 ephemeral: true
             });
         } catch (error) {
             console.error('Error setting timeout duration:', error);
-            await interaction.reply({
-                content: '❌ There was an error while setting the timeout duration.',
-                ephemeral: true
-            });
+            
+            // Handle the error gracefully
+            if (interaction.deferred) {
+                await interaction.editReply({
+                    content: '❌ There was an error while setting the timeout duration. Please try again later.',
+                    ephemeral: true
+                });
+            } else {
+                await interaction.reply({
+                    content: '❌ There was an error while setting the timeout duration. Please try again later.',
+                    ephemeral: true
+                });
+            }
         }
-    },
-    
-    // Export the timeoutDuration so other files can access it
-    getTimeoutDuration: () => timeoutDuration
+    }
 }; 
