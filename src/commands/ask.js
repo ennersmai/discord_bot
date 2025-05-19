@@ -1,5 +1,5 @@
 const { SlashCommandBuilder } = require('discord.js');
-const { getGeminiResponse } = require('../utils/geminiClient');
+const { getGeminiResponse, isGeminiAvailable } = require('../utils/geminiClient');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -16,10 +16,27 @@ module.exports = {
                 .addChoices(
                     { name: 'English', value: 'en' },
                     { name: 'Bulgarian', value: 'bg' }
+                ))
+        .addStringOption(option =>
+            option.setName('type')
+                .setDescription('Type of assistance needed')
+                .setRequired(false)
+                .addChoices(
+                    { name: 'General', value: 'general' },
+                    { name: 'Moderation Help', value: 'moderation' },
+                    { name: 'Code Help', value: 'codeHelp' }
                 )),
     
     async execute(interaction, client) {
         try {
+            // Check if Gemini API is available
+            if (!isGeminiAvailable()) {
+                return await interaction.reply({
+                    content: 'The AI service is currently unavailable. Please try again later.',
+                    ephemeral: true
+                });
+            }
+            
             // Get the database service
             const db = client.database;
             
@@ -32,8 +49,9 @@ module.exports = {
             // Get the question from options
             const question = interaction.options.getString('question');
             
-            // Get language from options or use guild default
+            // Get options from command
             let language = interaction.options.getString('language');
+            const useCase = interaction.options.getString('type') || 'general';
             
             // If no language specified, get the default language from database
             if (!language && guildId) {
@@ -51,12 +69,29 @@ module.exports = {
             }
             
             // Get response from Gemini
-            const response = await getGeminiResponse(question, language);
+            const response = await getGeminiResponse(question, language, useCase);
             
-            // Reply with the response
-            await interaction.editReply({
-                content: response
-            });
+            // If response is too long, split it into chunks
+            if (response.length > 2000) {
+                const chunks = splitMessage(response, { maxLength: 2000 });
+                
+                // Send the first chunk as a reply
+                await interaction.editReply({
+                    content: chunks[0]
+                });
+                
+                // Send the rest as follow-up messages
+                for (let i = 1; i < chunks.length; i++) {
+                    await interaction.followUp({
+                        content: chunks[i]
+                    });
+                }
+            } else {
+                // Reply with the response if it's not too long
+                await interaction.editReply({
+                    content: response
+                });
+            }
         } catch (error) {
             console.error('Error executing ask command:', error);
             
@@ -73,4 +108,32 @@ module.exports = {
             }
         }
     },
-}; 
+};
+
+// Utility function to split long messages
+function splitMessage(text, { maxLength = 2000 } = {}) {
+    if (text.length <= maxLength) return [text];
+    
+    const chunks = [];
+    let currentChunk = '';
+    
+    // Split text by newlines
+    const lines = text.split('\n');
+    
+    for (const line of lines) {
+        // If adding this line would exceed maxLength, push current chunk and start a new one
+        if (currentChunk.length + line.length + 1 > maxLength) {
+            chunks.push(currentChunk);
+            currentChunk = line;
+        } else {
+            // Otherwise, add line to current chunk
+            if (currentChunk) currentChunk += '\n';
+            currentChunk += line;
+        }
+    }
+    
+    // Push the final chunk
+    if (currentChunk) chunks.push(currentChunk);
+    
+    return chunks;
+} 
